@@ -109,26 +109,40 @@ Make sure to add your login credentials to the file if you plan on using a VPN!
     else:
         data_dir = str(Path(data_dir).absolute())
 
-    
+    router = copy.deepcopy(components['router'])
+    compose['services']['router'] = router
+
     for condition in conditions: # -- Networks, routers
 
         latency = condition['latency']
-        bandwidth = condition['bandwidth']
+        loss = condition['loss']
 
         # Create the network and router referencing it.
-        network = copy.deepcopy(components['network'])
-        network_name = f'{latency}-{bandwidth}'
-        
-        compose['networks'][network_name] = network
-        
-        router = copy.deepcopy(components['router'])
-        router_name = f'router-{network_name}'
-        router['networks']['default']['aliases'].append(f'{router_name}.default')
-        router['networks'][network_name] = router['networks'].pop('NETWORK_VALUE')
-        router['labels']['com.dane.tc.latency'] = latency
-        router['labels']['com.dane.tc.bandwidth'] = bandwidth
+        client_network = copy.deepcopy(components['network'])
+        router_network = copy.deepcopy(components['network'])
+        network_name = f'{latency}-{loss}'
+        client_network_name = f'client-lossem-{latency}-{loss}'
+        router_network_name = f'router-lossem-{latency}-{loss}'
 
-        compose['services'][router_name] = router
+        compose['networks'][client_network_name] = client_network
+        compose['networks'][router_network_name] = router_network
+        
+        lossem = copy.deepcopy(components['lossem'])
+        lossem_name = f'lossem-{network_name}'
+        lossem['networks'][client_network_name] = lossem['networks'].pop('CLIENT_NETWORK')
+        lossem['networks'][client_network_name]['aliases'].pop()
+        lossem['networks'][client_network_name]['aliases'].append('lossem-' + client_network_name)
+        lossem['networks'][router_network_name] = lossem['networks'].pop('ROUTER_NETWORK')
+        lossem['networks'][router_network_name]['aliases'].pop()
+        lossem['networks'][router_network_name]['aliases'].append('lossem-' + router_network_name)
+        router['networks'][router_network_name] = dict()
+        router['networks'][router_network_name]['aliases'] = list()
+        router['networks'][router_network_name]['aliases'].append('router-' + router_network_name)
+
+        lossem['labels']['com.dane.lossem.latency'] = latency
+        lossem['labels']['com.dane.lossem.loss'] = loss
+
+        compose['services'][lossem_name] = lossem
 
         # Create the clients referencing each behavior. These should also reference
         # the network and router we just added.
@@ -140,8 +154,8 @@ Make sure to add your login credentials to the file if you plan on using a VPN!
             # from the behavior to make the compose service name compatible.
             behavior_name = behavior if not behavior.startswith('custom/') else behavior[len('custom/'):]
             client_name = f'client-{network_name}-{behavior_name}'
-            client['depends_on'].append(router_name)
-            client['networks'].append(network_name)
+            client['depends_on'].append(lossem_name)
+            client['networks'].append(client_network_name)
             client['labels']['com.dane.behavior'] = behavior
             
             client['env_file'].append(env_file)
@@ -158,20 +172,6 @@ Make sure to add your login credentials to the file if you plan on using a VPN!
             # NOTE: This doesn't handle duplicates/replicas. The service name
             # will be the same and thus will share the same key in the dict.
             compose['services'][client_name] = client
-
-    # If we're configured to use local images, then remove the Docker Hub repo
-    # prefix from all image entries.
-    if config['system']['use_local_images']:
-        print("""
-Looks like you want to use local container images -- nice! Just make sure that
-you've run `make build` at some point to build those local images.
-
-If you've updated a local Dockerfile since then, run
-  `make build only=<name_of_service>`
-to rebuild just that image.
-""")
-        for service in compose['services']:
-            service['image'] = service['image'].split('/')[-1]
 
     built_file = Path(tool_dir, 'built/docker-compose.yml')
     built_file.parent.mkdir(parents=True, exist_ok=True)

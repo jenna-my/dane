@@ -25,5 +25,5 @@ CMD ["sleep", "infinity"]
 
 # Metadata
 ARG BUILD_DATE
-LABEL maintainer="https://github.com/parkeraddison"
+LABEL maintainer="https://github.com/charles-laubach"
 LABEL org.opencontainers.image.created=${BUILD_DATE}
