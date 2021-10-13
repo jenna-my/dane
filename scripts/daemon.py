@@ -70,126 +70,123 @@ LABEL_PREFIX = 'com.dane.'
 # The DOCKER_HOST environment variable should already be defined
 API = docker.from_env()
 
-def setup_router(router):
+# We'll do the setup for each container as it is created. To do this, we'll
+# listen for docker 'start' events, and use a callback.
+def setup_lossem(lossem, router):
     
-    logging.info(f'[+] Setting up router `{router.name}`')
+    logging.info(f'[+] Setting up lossem `{lossem.name}`')
 
     ## Networking configuration
 
-    latency = router.labels.get(LABEL_PREFIX+'tc.latency')
-    bandwidth = router.labels.get(LABEL_PREFIX+'tc.bandwidth')
+    latency = lossem.labels.get(LABEL_PREFIX+'lossem.latency')
+    loss = lossem.labels.get(LABEL_PREFIX+'lossem.loss')
 
-    # We ultimately rely upon the router to run a script which does all
-    # necessary ip route/table manipulations and runs tc commands to emulate our
-    # desired network conditions.
-    service_name = router.labels['com.docker.compose.service']
+    service_name = lossem.labels['com.docker.compose.service']
 
-    exitcode, output = router.exec_run(
-        ['scripts/router/network-setup.sh', service_name, latency, bandwidth]
+    # Setup tun interface and activate lossem.py script
+    exitcode, output = lossem.exec_run(
+        ['/scripts/lossem/network-setup.sh', service_name, latency, loss]
     )
 
     if exitcode != 0:
-        raise Exception(f'Network configuration failed for router `{router.name}`.\n{output}')
+        raise Exception(f'Network configuration failed for lossem `{lossem.name}`.\n{output}')
 
-    # # We'll re-set the labels to their achieved values so the clients can use
-    # # them in their naming convention.
-    # conditions = output.decode().split() # Tuple of achieved latency, bandwidth
-    # router.labels[LABEL_PREFIX+'tc.latency'] = conditions[0]
-    # router.labels[LABEL_PREFIX+'tc.bandwidth'] = conditions[1]
+    # Set default route of lossem to router
+    router_networks = set(router.attrs['NetworkSettings']['Networks'].keys())
+    lossem_networks = set(lossem.attrs['NetworkSettings']['Networks'].keys())
+    # Find the network that router and lossem have in common
+    router_lossem_network = lossem_networks.intersection(router_networks).pop()
+    router_IP = router.attrs['NetworkSettings']['Networks'][router_lossem_network]['IPAddress']
     
-    logging.info(f'Network configuration for `{router.name}` complete.')
+    exitcode, output = lossem.exec_run(
+        ['sh', '-c', f"ip route replace default via {router_IP}"]
+    )
+    if exitcode != 0:
+        raise Exception(f'Set lossem default route failed for lossem `{lossem.name}.\n{output}')
+
+    logging.info(f'Network setup for `{lossem.name}` complete.')
+
+def teardown_lossem(lossem):
+    logging.info(f'[-] Tearing down `{lossem.name}`.')
+    lossem.stop()
+    logging.info(f'`{lossem.name}` stopped.')
+
+def setup_router(router):
+    logging.info(f"[+] Setting up router `{router.name}`")
+    exitcode, output = router.exec_run(
+        ['sh', '-c', "iptables-legacy -t nat -A POSTROUTING -o eth0 -j MASQUERADE"]
+    )
+
+    if exitcode != 0:
+        raise Exception(f'Set NAT configuration failed for router `{router.name}`.\n{output}')
+
+    logging.info(f"Network setup for `{router.name}` complete.")
+
+    router.exec_run(
+        redirect_to_out("iperf3 -s -D"),
+        detach=True
+    )
+
+  logging.info(f"Iperf3 daemon started on `{router.name}`")
 
 def teardown_router(router):
-
     logging.info(f'[-] Tearing down `{router.name}`.')
     router.stop()
     logging.info(f'`{router.name}` stopped.')
 
-# We'll do the setup for each container as it is created. To do this, we'll
-# listen for docker 'start' events, and use a callback.
-def setup_client(client, routers=[]):
-    """
-    Callback to docker startup event listener. Runs, in order:
-    1. Connect to router
-    2. Connect to vpn
-    3. Behavior launching
-    4. Network-stats collection
-    """
-
-    logging.info(f"[+] Setting up client `{client.name}`")
-
-    ## Connect to router
-
-    # Connect to the internet *through* the router container. Note that the
-    # router container should always have the hostname alias `router` on the
-    # shared network, so we can just find the ip of that hostname.
-    #
-    # To support subshells $() we need to run this with sh -c.
-    client.exec_run(
-        ['sh', '-c', "ip route replace default via $(getent hosts router | cut -d ' ' -f 1)"]
+def setup_client(client, router, lossems):
+    exitcode, output = client.exec_run(
+        ['sh', '-c', "ip addr | grep eth0 | cut -d ' ' -f6 | cut -d '/' -f1 | tail -n 1"]
     )
-
-    logging.info(f'Client `{client.name}` connected to internal router.')
-
-    ## Connect to vpn
-
-    # The username, group, and password for our vpn are all loaded into the
-    # client's environment variables. See `/.env`
-    # We can use these variables to log into the vpn without the need for
-    # interactivity!
-    #
-    # We don't want to continue with behavior launching and data collection
-    # until we've successfully connected to the vpn, so we'll run openconnect
-    # in a --background mode and we can wait for the foreground process to exit.
-    #
-    # If the label for the client says it's not enabled, don't run this!
-    is_vpn_enabled = client.labels.get(LABEL_PREFIX+'vpn.enabled')
-    # Note that labels are always treated as strings!
-    if is_vpn_enabled == 'True':
-
-        logging.info(f'Client `{client.name}` connecting to VPN...')
-
-        server = client.labels.get(LABEL_PREFIX+'vpn.server') or 'vpn.ucsd.edu'
-
-        exitcode, output = client.exec_run([
-            'sh', '-c',
-            f'echo "$VPN_PASSWORD" \
-            | openconnect --script ./vpnc-script --disable-ipv6 \
-            -u "$VPN_USERNAME" --authgroup="$VPN_USERGROUP" --passwd-on-stdin \
-            --non-inter --background \
-            {server} \
-            && exit 0'
-        ])
-
-        if exitcode != 0 :
-            raise Exception(f'{client.name} did not connect to the VPN!\n\n{output}')
-
-        logging.info(f'Client `{client.name}` connected to VPN.')
-
-    ## Before we launch the behavior, we'll run a speed test
-
-    logging.info(f'Running speed test in `{client.name}`')
-    exitcode, output = client.exec_run([
-        'speedtest', '--accept-license', '-f', 'json'
-    ])
     if exitcode != 0:
-        raise Exception(f'Speedtest failed in `{client.name}`\n\n{output}')
+        raise Exception(f'Get network configuration failed for router `{router.name}`.\n{output}')
 
-    # Note that the speedtest produces a license banner (seems unavoidable), so
-    # we can just take the last line of output.
-    speedtest = json.loads(output.decode().strip().split('\n')[-1])
+    client_addr_to_lossem = output.decode().strip()
+    logging.info(f"Got client_addr: {client_addr_to_lossem}")
+
+    client_network = list(client.attrs['NetworkSettings']['Networks'].keys())[0]
+    # By convention, network between lossem and router has same name as network between client and lossem, except with router instead of client
+    router_network = client_network.replace("client","router")
+    # Look for lossem that shares network with this client
+    lossem = next(filter(lambda l: client_network in l.attrs['NetworkSettings']['Networks'], lossems))
     
-    latency = f'{round(speedtest["ping"]["latency"])}ms'
-    # Note that this outputs download speed in bytes/s, so we'll need to convert
-    # to Mbit/s
-    bits_per_byte = 8
-    mega = 1e6
-    bandwidth = f'{round(speedtest["download"]["bandwidth"] * bits_per_byte / mega)}Mbit'
+    lossem_addr_to_client = lossem.attrs['NetworkSettings']['Networks'][client_network]['IPAddress']
+    lossem_addr_to_router = lossem.attrs['NetworkSettings']['Networks'][router_network]['IPAddress']
+    router_addr_to_lossem = router.attrs['NetworkSettings']['Networks'][router_network]['IPAddress']
 
-    ## Behavior launching
+    logging.info(f"ip route replace default via {lossem_addr_to_client}")
+    exitcode, output = client.exec_run(
+        ['sh', '-c', f"ip route replace default via {lossem_addr_to_client}"]
+    )
+    if exitcode != 0:
+        raise Exception(f'Set client default route failed for `{client.name}`.\n{output}')
+
+    
+    exitcode, output = router.exec_run(
+        ['sh', '-c', f"ip route add {client_addr_to_lossem}/32 via {lossem_addr_to_router}"]
+    )
+    if exitcode != 0:
+        raise Exception(f'Set client route failed for router `{router.name}`.\n{output}')
 
     behavior = client.labels.get(LABEL_PREFIX+'behavior')
+    ## Network-stats collection
 
+    # # We'll use the lossem's network condition labels in the filename.
+    latency = lossem.labels.get(LABEL_PREFIX+'lossem.latency')
+    loss = lossem.labels.get(LABEL_PREFIX+'lossem.loss')
+
+    details = f'{latency}-{loss}-{behavior.replace("/", ".")}'
+
+    network_stats_command = f"python scripts/client/collection.py '{details}'"
+
+    client.exec_run(
+        redirect_to_out(network_stats_command),
+        detach=True
+    )
+
+    logging.info(f'Network stats on `{client.name}` running as {details}.')
+    
+    # Start test behavior
     behavior_command = None
     if behavior == 'ping' or behavior == 'test':
         behavior_command = 'ping -i 3 8.8.8.8'
@@ -200,7 +197,9 @@ def setup_client(client, routers=[]):
         # *module* so it can still utilize imports from its parent package.
         behavior_command = 'python scripts/client/starter-scripts/streaming/endless_youtube.py'
     elif behavior == 'browsing':
-        behavior_command = 'python scripts/client/starter-scripts/browsing/endless_twitter.py' 
+        behavior_command = 'python scripts/client/starter-scripts/browsing/endless_twitter.py'
+    elif behavior == 'iperf':
+        behavior_command = f"iperf3 -i 0 -t 300 -c {router_addr_to_lossem} &"
 
     # We allow custom scripts to be run when behavior is `custom/<filename.py>`,
     # in which case we tell the client to pip install any requirements and run
@@ -208,7 +207,7 @@ def setup_client(client, routers=[]):
     elif behavior.startswith('custom/'):
         path_to_script = f'scripts/{behavior}'
         path_to_requirements = 'scripts/custom/requirements.txt'
-        
+
         behavior_command = f'pip install -r {path_to_requirements}; python {path_to_script}'
 
     elif behavior is None:
@@ -218,33 +217,15 @@ def setup_client(client, routers=[]):
         logging.warning(f'Target behavior for `{client.name}` not recognized; will sleep.')
         pass
 
+    logging.info(f"Running on {client.name}: {behavior_command}")
     client.exec_run(
         redirect_to_out(behavior_command),
         detach=True
     )
+    logging.info(f"Finished on {client.name}: {behavior_command}")
 
     logging.info(f'Behavior script for `{client.name}` running.')
 
-    ## Network-stats collection
-
-    # # We'll use the router's network condition labels in the filename.
-    # network = list(client.attrs['NetworkSettings']['Networks'].keys())[0]
-    # router = next(filter(lambda r: network in r.attrs['NetworkSettings']['Networks'], routers))
-
-    # latency = router.labels.get(LABEL_PREFIX+'tc.latency')
-    # bandwidth = router.labels.get(LABEL_PREFIX+'tc.bandwidth')
-    # logging.info(f'{latency} {bandwidth}')
-
-    details = f'{latency}-{bandwidth}-{behavior.replace("/", ".")}'
-
-    network_stats_command = f"python scripts/client/collection.py '{details}'"
-
-    client.exec_run(
-        redirect_to_out(network_stats_command),
-        detach=True
-    )
-
-    logging.info(f'Network stats on `{client.name}` running as {details}.')
 
 def teardown_client(client):
     """
@@ -288,7 +269,8 @@ def listen_for_container_startup(timeout=15):
 
     logging.info(f'Listening for docker startup events. Will stop listening after {timeout} seconds.')
 
-    routers = []
+    router = None
+    lossems = []
     clients = []
 
     # Listen to docker events and handle client container setup when they start.
@@ -324,12 +306,15 @@ def listen_for_container_startup(timeout=15):
 
             if container_type == 'router':
                 router = API.containers.get(event['id'])
-                routers.append(router)
                 setup_router(router)
+            elif container_type == 'lossem':
+                lossem = API.containers.get(event['id'])
+                lossems.append(lossem)
+                setup_lossem(lossem,router)
             elif container_type == 'client':
                 client = API.containers.get(event['id'])
                 clients.append(client)
-                setup_client(client, routers=routers)
+                setup_client(client, router, lossems)
             elif container_type == 'daemon':
                 pass
             else:
@@ -339,9 +324,9 @@ def listen_for_container_startup(timeout=15):
         logging.info('Timeout seen.')
 
     logging.info('No longer listening for docker events.')
-    return routers, clients
+    return router, lossems, clients
 
-def handle_interrupt(routers, clients):
+def handle_interrupt(router, lossems, clients):
 
     logging.info('Daemon interrupted!')
 
@@ -350,8 +335,10 @@ def handle_interrupt(routers, clients):
 
     logging.info('All clients stopped.')
 
-    for router in routers:
-        teardown_router(router)
+    for lossem in lossems:
+        teardown_lossem(lossem)
+
+    teardown_router(router)
 
     logging.info('All container stopped, Daemon will now exit.')
     logging.info('Check `/data` for the network-stats output. Thanks for using this tool!')
@@ -387,9 +374,9 @@ if __name__ == "__main__":
     # connected to VPN, sequentially.
     #
     # TODO: Make event listener for startup non-blocking.
-    routers, clients = listen_for_container_startup(timeout=400)
+    router, lossems, clients = listen_for_container_startup(timeout=60)
 
-    listen_for_interrupt(handler=lambda: handle_interrupt(routers, clients))
+    listen_for_interrupt(handler=lambda: handle_interrupt(router, lossems, clients))
     
     # While we're waiting for some signal the daemon can just chill out!
     signal.pause()
