@@ -47,14 +47,7 @@ tool_dir ?=
 config_file ?= 
 compose_image ?= dane-compose
 compose:
-	@docker run \
-	-it \
-	--rm \
-	-v "$(PWD):/home" \
-	$(compose_image) \
-	python setup/build_compose.py \
-	$(if $(tool_dir),--src $(tool_dir),) \
-	$(if $(config_file),-config $(config_file),)
+	@python3 setup/build_compose.py
 
 .PHONY: build
 tag ?= latest
