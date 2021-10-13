@@ -1,24 +1,22 @@
 {
     "behaviors": [
-        "streaming",
-        "browsing"
+        "iperf"
     ],
     "conditions": [
         {
-            "latency": "20ms",
-            "bandwidth": "50Mbit"
+            "latency": "200",
+            "loss": "1000"
         },
         {
-            "latency": "200ms",
-            "bandwidth": "5Mbit"
+            "latency": "200",
+            "loss": "5000"
         }
     ],
     "vpn": {
-        "enabled": true,
+        "enabled": false,
         "server": "vpn.your-vpn-provider.com"
     },
     "system": {
-        "shared_memory_size": "2gb",
-        "use_local_images": false
+        "shared_memory_size": "1gb"
     }
 }
