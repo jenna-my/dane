@@ -123,11 +123,11 @@ def setup_router(router):
     logging.info(f"Network setup for `{router.name}` complete.")
 
     router.exec_run(
-        redirect_to_out("iperf3 -s -D"),
+        redirect_to_out("iperf -s"),
         detach=True
     )
 
-  logging.info(f"Iperf3 daemon started on `{router.name}`")
+    logging.info(f"Iperf2 daemon started on `{router.name}`")
 
 def teardown_router(router):
     logging.info(f'[-] Tearing down `{router.name}`.')
@@ -199,7 +199,7 @@ def setup_client(client, router, lossems):
     elif behavior == 'browsing':
         behavior_command = 'python scripts/client/starter-scripts/browsing/endless_twitter.py'
     elif behavior == 'iperf':
-        behavior_command = f"iperf3 -i 0 -t 300 -c {router_addr_to_lossem} &"
+        behavior_command = f'iperf -i 60 -t 300 -c {router_addr_to_lossem}'
 
     # We allow custom scripts to be run when behavior is `custom/<filename.py>`,
     # in which case we tell the client to pip install any requirements and run
