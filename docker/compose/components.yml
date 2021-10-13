@@ -6,7 +6,7 @@ client:
   depends_on:
     - daemon
     - router
-  image: iperf 
+  image: dane-iperf
   networks: []
   cap_add:
     - NET_ADMIN
@@ -18,7 +18,7 @@ client:
     com.dane.behavior: BEHAVIOR_VALUE
 
 lossem:
-  image: lossem
+  image: dane-lossem
   cap_add:
     - NET_ADMIN
   depends_on:
@@ -41,7 +41,7 @@ lossem:
 router:
   depends_on:
     - daemon
-  image: iperf 
+  image: dane-iperf 
   networks:
     default:
       aliases: []

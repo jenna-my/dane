@@ -45,14 +45,8 @@ endef
 export first_time_msg
 tool_dir ?= 
 config_file ?= 
-compose_image ?= parkeraddison/dane-compose
+compose_image ?= dane-compose
 compose:
-# Build the compose file from given configuration in config.py. We'll just use
-# the image that's hosted on Docker Hub.
-ifeq ($(shell docker images -q $(compose_image)),)
-	@echo "$$first_time_msg"
-	@docker pull $(compose_image)
-endif
 	@docker run \
 	-it \
 	--rm \
@@ -70,9 +64,9 @@ build:
 ifeq ($(only),all)
 
 	docker build \
-	-f docker/client/Dockerfile \
+	-f docker/iperf/Dockerfile \
 	--build-arg BUILD_DATE="$(shell date --rfc-3339 seconds)" \
-	-t dane-client:$(tag) .
+	-t dane-iperf:$(tag) .
 
 	docker build \
 	-f docker/daemon/Dockerfile \
@@ -80,9 +74,9 @@ ifeq ($(only),all)
 	-t dane-daemon:$(tag) .
 
 	docker build \
-	-f docker/router/Dockerfile \
+	-f docker/lossem/Dockerfile \
 	--build-arg BUILD_DATE="$(shell date --rfc-3339 seconds)" \
-	-t dane-router:$(tag) .
+	-t dane-lossem:$(tag) .
 
 	docker build \
 	-f docker/compose/Dockerfile \
@@ -99,9 +93,9 @@ endif
 .PHONY: clean
 clean: stop
 # Make sure everything is stopped and remove all built images
-	docker rmi dane-client
+	docker rmi dane-iperf
 	docker rmi dane-daemon
-	docker rmi dane-router
+	docker rmi dane-lossem
 	docker rmi dane-compose
 
 .PHONY: exec
