@@ -177,6 +177,13 @@ def setup_client(client, router, lossems):
 
     details = f'{latency}-{loss}-{behavior.replace("/", ".")}'
 
+    exitcode, output = client.exec_run(
+            ['sh', '-c', f"ethtool -K eth0 gso off tso off sg off gro off lro off"]
+    )
+
+    if exitcode != 0:
+        raise Exception(f'Disable offloads failed for client `{client.name}`.\n{output}')
+
     network_stats_command = f"python scripts/client/collection.py '{details}'"
 
     client.exec_run(
