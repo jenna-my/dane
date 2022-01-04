@@ -4,12 +4,18 @@
     ],
     "conditions": [
         {
-            "latency": "200",
-            "loss": "1000"
+            "latency": "300",
+            "loss": "5000",
+	    "random": "true",
+	    "later_latency": "300",
+	    "later_loss": "500"
         },
-        {
-            "latency": "200",
-            "loss": "5000"
+	{
+            "latency": "300",
+            "loss": "500",
+            "random": "true",
+            "later_latency": "300",
+            "later_loss": "5000"
         }
     ],
     "vpn": {

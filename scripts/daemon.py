@@ -80,12 +80,14 @@ def setup_lossem(lossem, router):
 
     latency = lossem.labels.get(LABEL_PREFIX+'lossem.latency')
     loss = lossem.labels.get(LABEL_PREFIX+'lossem.loss')
+    random = lossem.labels.get(LABEL_PREFIX+'lossem.random')
+    later_latency = lossem.labels.get(LABEL_PREFIX+'lossem.later_latency')
+    later_loss = lossem.labels.get(LABEL_PREFIX+'lossem.later_loss')
 
     service_name = lossem.labels['com.docker.compose.service']
-
     # Setup tun interface and activate lossem.py script
     exitcode, output = lossem.exec_run(
-        ['/scripts/lossem/network-setup.sh', service_name, latency, loss]
+        ['/scripts/lossem/network-setup.sh', service_name, latency, loss, random, later_latency, later_loss]
     )
 
     if exitcode != 0:
@@ -174,8 +176,11 @@ def setup_client(client, router, lossems):
     # # We'll use the lossem's network condition labels in the filename.
     latency = lossem.labels.get(LABEL_PREFIX+'lossem.latency')
     loss = lossem.labels.get(LABEL_PREFIX+'lossem.loss')
+    random = lossem.labels.get(LABEL_PREFIX+'lossem.random')
+    later_latency = lossem.labels.get(LABEL_PREFIX+'lossem.later_latency')
+    later_loss = lossem.labels.get(LABEL_PREFIX+'lossem.later_loss')
 
-    details = f'{latency}-{loss}-{behavior.replace("/", ".")}'
+    details = f'{latency}-{loss}-{random}-{later_latency}-{later_loss}-{behavior.replace("/", ".")}'
 
     exitcode, output = client.exec_run(
             ['sh', '-c', f"ethtool -K eth0 gso off tso off sg off gro off lro off"]

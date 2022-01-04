@@ -7,15 +7,21 @@ import os
 import ipaddress
 import collections
 import time
+import sys
 from impacket.IP6 import IP6
 from impacket import ImpactDecoder
 from impacket.ImpactPacket import IP, TCP, UDP
 from pytun import TunTapDevice
 import argparse
+import random
 
 packet_queue = collections.deque()
 loss_ratio = -1
 delay = 0
+random_drop = False
+later_delay = 0
+later_loss = 0
+test_start = -1
 
 class _ConnectionKey(object):
     """ Represent a unique 5-tuple (src/dst IP/port + protocol) in manner that disregards the order
@@ -146,16 +152,28 @@ def receivepacket(conn, mask, conn_partner,conn_tracker):
         #print("Packet Received. Src IP: " + str(src) + " Dst IP: " + str(dst) + " Src Port: " + str(sport) + " Dst Port: " + str(dport))
         conn_tracker.increment_packet(src,sport,dst,dport,prot)
         pkts = conn_tracker.get_pkt_count(src,sport,dst,dport,prot)
-        if loss_ratio != -1 and pkts % loss_ratio == 0:
-            losePacket = True
+        curr_loss_ratio = -1
+        curr_delay = 0
+        if time.clock_gettime(time.CLOCK_BOOTTIME) < test_start + 180:
+            curr_loss_ratio = loss_ratio
+            curr_delay = delay
+        else:
+            curr_loss_ratio = later_loss
+            curr_delay = later_delay
+        if curr_loss_ratio != -1:
+            if random_drop:
+                random_num = random.random()
+                losePacket = random_num < (1 / curr_loss_ratio)
+            else:
+                losePacket = pkts % curr_loss_ratio == 0
         #print("Packets: " + str(pkts))
         #if "tun" in loss_dictionary:
         #    print("tun in loss dictionary") 
         #    if pkts % loss_dictionary["tun"] == 0:
         #        losePacket = True
     if(losePacket):
-        #print("Dropping packet")
-        losePacket=True
+        print("drop," + str(time.clock_gettime_ns(time.CLOCK_REALTIME)/1e9) + "," + str(src) + "," + str(sport) + "," + str(dst) + "," + str(dport) + "," + str(prot))
+        sys.stdout.flush()
     else:
         try:
             #conn_partner.sendall(raw_data)
@@ -164,7 +182,7 @@ def receivepacket(conn, mask, conn_partner,conn_tracker):
             if pkt_time == -1:
                 print("Bad time received!")
             else:
-                packet_queue.append((pkt_time+delay,conn_partner,raw_data))
+                packet_queue.append((pkt_time+curr_delay,conn_partner,raw_data))
             #print(packet_queue.popleft())
         except OSError:
             print(len(raw_data))
@@ -182,9 +200,18 @@ decoder = ImpactDecoder.IPDecoder()
 parser = argparse.ArgumentParser()
 parser.add_argument("delay", help="Delay every packet by this number of milliseconds", type=int)
 parser.add_argument("loss", help="Drop every this number of packets. -1 to disable.", type=int)
+parser.add_argument("random_drop", help="Drop packets randomly instead of deterministically", choices=['true', 'false'])
+parser.add_argument("later_delay", help="Delay every packet by this number of milliseconds after 3 minutes", type=int)
+parser.add_argument("later_loss", help="Drop every this number of packets after 3 minutes. -1 to disable.", type=int)
 args = parser.parse_args()
 loss_ratio = args.loss
 delay = args.delay / 1000
+random_drop=False
+if(args.random_drop=='true'):
+    random_drop=True
+later_delay = args.later_delay / 1000
+later_loss = args.later_loss
+test_start = time.clock_gettime(time.CLOCK_BOOTTIME)
 
 conn_tracker = _ConnTracker()
 to = None
