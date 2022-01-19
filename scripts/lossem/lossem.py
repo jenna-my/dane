@@ -159,9 +159,9 @@ def receivepacket(conn, mask, conn_partner,conn_tracker):
             curr_loss_ratio = loss_ratio
             curr_delay = delay
         else:
-            # need to only run once? (switch boolean mechanism)
+            # Print precise time
             if switched is False:
-                print("switch," + str(time.clock_gettime_ns(time.CLOCK_REALTIME)/1e9) + "," + str(src) + "," + str(sport) + "," + str(dst) + "," + str(dport) + "," + str(prot))
+                print("switch," + str(time.clock_gettime_ns(time.CLOCK_REALTIME)/1e9))
                 sys.stdout.flush()
                 switched = True
             curr_loss_ratio = later_loss
