@@ -164,6 +164,7 @@ def receivepacket(conn, mask, conn_partner,conn_tracker):
                 print("switch," + str(time.clock_gettime_ns(time.CLOCK_REALTIME)/1e9))
                 global switched
                 switched = True
+                sys.stdout.flush()
             curr_loss_ratio = later_loss
             curr_delay = later_delay
         if curr_loss_ratio != -1:
