@@ -22,6 +22,7 @@ random_drop = False
 later_delay = 0
 later_loss = 0
 test_start = -1
+switched = False
 
 class _ConnectionKey(object):
     """ Represent a unique 5-tuple (src/dst IP/port + protocol) in manner that disregards the order
@@ -158,6 +159,11 @@ def receivepacket(conn, mask, conn_partner,conn_tracker):
             curr_loss_ratio = loss_ratio
             curr_delay = delay
         else:
+            # need to only run once? (switch boolean mechanism)
+            if switched is False:
+                print("switch," + str(time.clock_gettime_ns(time.CLOCK_REALTIME)/1e9) + "," + str(src) + "," + str(sport) + "," + str(dst) + "," + str(dport) + "," + str(prot))
+                sys.stdout.flush()
+                switched = True
             curr_loss_ratio = later_loss
             curr_delay = later_delay
         if curr_loss_ratio != -1:
