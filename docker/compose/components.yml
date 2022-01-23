@@ -38,7 +38,7 @@ lossem:
     com.dane.lossem.random: RANDOM_VALUE
     com.dane.lossem.later_latency: LATER_LATENCY_VALUE
     com.dane.lossem.later_loss: LATER_LOSS_VALUE
-    om.dane.lossem.later_start: LATER_START_VALUE
+    com.dane.lossem.later_start: LATER_START_VALUE
   volumes:
     - ../scripts:/scripts/
 
