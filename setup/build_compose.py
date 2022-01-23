@@ -119,13 +119,14 @@ Make sure to add your login credentials to the file if you plan on using a VPN!
         random = condition['random']
         later_latency = condition['later_latency']
         later_loss = condition['later_loss']
+        later_start = condition['later_start']
 
         # Create the network and router referencing it.
         client_network = copy.deepcopy(components['network'])
         router_network = copy.deepcopy(components['network'])
-        network_name = f'{latency}-{loss}-{random}-{later_latency}-{later_loss}'
-        client_network_name = f'client-lossem-{latency}-{loss}-{random}-{later_latency}-{later_loss}'
-        router_network_name = f'router-lossem-{latency}-{loss}-{random}-{later_latency}-{later_loss}'
+        network_name = f'{latency}-{loss}-{random}-{later_latency}-{later_loss}-{later_start}'
+        client_network_name = f'client-lossem-{latency}-{loss}-{random}-{later_latency}-{later_loss}-{later_start}'
+        router_network_name = f'router-lossem-{latency}-{loss}-{random}-{later_latency}-{later_loss}-{later_start}'
 
         compose['networks'][client_network_name] = client_network
         compose['networks'][router_network_name] = router_network
@@ -148,6 +149,7 @@ Make sure to add your login credentials to the file if you plan on using a VPN!
         lossem['labels']['com.dane.lossem.random'] = random
         lossem['labels']['com.dane.lossem.later_latency'] = later_latency
         lossem['labels']['com.dane.lossem.later_loss'] = later_loss
+        lossem['labels']['com.dane.lossem.later_start'] = later_start
 
         compose['services'][lossem_name] = lossem
 
