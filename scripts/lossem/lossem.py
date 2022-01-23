@@ -22,7 +22,7 @@ random_drop = False
 later_delay = 0
 later_loss = 0
 test_start = -1
-later_start = -1
+later_start = 0
 switched = False
 
 class _ConnectionKey(object):
