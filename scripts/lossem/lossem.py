@@ -22,6 +22,7 @@ random_drop = False
 later_delay = 0
 later_loss = 0
 test_start = -1
+later_start = -1
 switched = False
 
 class _ConnectionKey(object):
@@ -155,7 +156,7 @@ def receivepacket(conn, mask, conn_partner,conn_tracker):
         pkts = conn_tracker.get_pkt_count(src,sport,dst,dport,prot)
         curr_loss_ratio = -1
         curr_delay = 0
-        if time.clock_gettime(time.CLOCK_BOOTTIME) < test_start + 180:
+        if time.clock_gettime(time.CLOCK_BOOTTIME) < test_start + later_start:
             curr_loss_ratio = loss_ratio
             curr_delay = delay
         else:
@@ -210,6 +211,7 @@ parser.add_argument("loss", help="Drop every this number of packets. -1 to disab
 parser.add_argument("random_drop", help="Drop packets randomly instead of deterministically", choices=['true', 'false'])
 parser.add_argument("later_delay", help="Delay every packet by this number of milliseconds after 3 minutes", type=int)
 parser.add_argument("later_loss", help="Drop every this number of packets after 3 minutes. -1 to disable.", type=int)
+parser.add_argument("later_start", help="The second at which the later parameters will be applied", type=int)
 args = parser.parse_args()
 loss_ratio = args.loss
 delay = args.delay / 1000
@@ -218,6 +220,7 @@ if(args.random_drop=='true'):
     random_drop=True
 later_delay = args.later_delay / 1000
 later_loss = args.later_loss
+later_start = args.later_start
 test_start = time.clock_gettime(time.CLOCK_BOOTTIME)
 
 conn_tracker = _ConnTracker()
