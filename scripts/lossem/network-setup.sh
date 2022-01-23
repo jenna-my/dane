@@ -13,6 +13,7 @@ loss="$3"
 random="$4"
 later_latency="$5"
 later_loss="$6"
+later_start="$7"
 delim="-"
 
 mkdir /dev/net
