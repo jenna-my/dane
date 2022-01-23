@@ -21,7 +21,7 @@ mknod /dev/net/tun c 10 200
 echo 200 lossem >> /etc/iproute2/rt_tables
 ip rule add iif eth0 table lossem
 ip rule add iif eth1 table lossem
-nohup python3 /scripts/lossem/lossem.py $latency $loss $random $later_latency $later_loss >> /data/losslog$delim$latency$delim$loss$delim$random$delim$later_latency$delim$later_loss.csv 2>&1 &
+nohup python3 /scripts/lossem/lossem.py $latency $loss $random $later_latency $later_loss $later_start >> /data/losslog$delim$latency$delim$loss$delim$random$delim$later_latency$delim$later_loss$delim$later_start.csv 2>&1 &
 sleep 1
 ip route add default via 192.168.250.2 dev lossem table lossem
 
